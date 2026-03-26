@@ -2,7 +2,7 @@
 set -e
 
 COUPON_DIR="${COUPON_DIR:-/app/data}"
-BASE_URL="${COUPON_BASE_URL:-https://coupon-files.s3.amazonaws.com}"
+BASE_URL="${COUPON_BASE_URL:-https://orderfoodonline-files.s3.ap-southeast-2.amazonaws.com}"
 
 mkdir -p "$COUPON_DIR"
 
