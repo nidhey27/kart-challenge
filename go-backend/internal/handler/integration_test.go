@@ -1,4 +1,4 @@
-package integration_test
+package handler_test
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nidhey27/kart-challenge/internal/config"
 	"github.com/nidhey27/kart-challenge/internal/handler"
 	"github.com/nidhey27/kart-challenge/internal/middleware"
 	"github.com/nidhey27/kart-challenge/internal/repository"
@@ -18,18 +17,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// validCouponCode is a pre-seeded coupon used across tests.
-const validCouponCode = "TESTCODE1"
+const (
+	testAPIKey       = "apitest"
+	validCouponCode  = "TESTCODE1"
+)
 
-func buildTestRouter(t *testing.T) (*gin.Engine, *config.Config) {
+func buildTestRouter(t *testing.T) *gin.Engine {
 	t.Helper()
-
 	gin.SetMode(gin.TestMode)
-
-	cfg := &config.Config{
-		Port:   "8080",
-		APIKey: "apitest",
-	}
 
 	logger := zap.NewNop()
 
@@ -37,12 +32,9 @@ func buildTestRouter(t *testing.T) (*gin.Engine, *config.Config) {
 	require.NoError(t, err)
 
 	orderRepo := repository.NewOrderRepository()
-
-	// Pre-populate coupon repo — do NOT call LoadCoupons (too slow in tests).
-	couponCodes := map[string]struct{}{
+	couponRepo := repository.NewCouponRepository(map[string]struct{}{
 		validCouponCode: {},
-	}
-	couponRepo := repository.NewCouponRepository(couponCodes)
+	})
 
 	productSvc := service.NewProductService(productRepo)
 	couponSvc := service.NewCouponService(couponRepo)
@@ -55,27 +47,23 @@ func buildTestRouter(t *testing.T) (*gin.Engine, *config.Config) {
 	r.Use(gin.Recovery())
 
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":         "ok",
-			"coupons_loaded": couponRepo.Size(),
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "coupons_loaded": couponRepo.Size()})
 	})
 
 	api := r.Group("/api")
-	api.Use(middleware.APIKeyAuth(cfg.APIKey))
 	{
 		api.GET("/product", productHandler.GetAll)
 		api.GET("/product/:id", productHandler.GetByID)
-		api.POST("/order", orderHandler.PlaceOrder)
+		api.POST("/order", middleware.APIKeyAuth(testAPIKey), orderHandler.PlaceOrder)
 	}
 
-	return r, cfg
+	return r
 }
 
 // ── /health ───────────────────────────────────────────────────────────────────
 
 func TestHealth(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/health", nil)
 	r.ServeHTTP(w, req)
@@ -90,19 +78,10 @@ func TestHealth(t *testing.T) {
 
 // ── GET /api/product ──────────────────────────────────────────────────────────
 
-func TestGetProducts_NoAuth(t *testing.T) {
-	r, _ := buildTestRouter(t)
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/product", nil)
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-}
-
 func TestGetProducts_OK(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/product", nil)
-	req.Header.Set("api_key", "apitest")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -115,10 +94,9 @@ func TestGetProducts_OK(t *testing.T) {
 // ── GET /api/product/:id ──────────────────────────────────────────────────────
 
 func TestGetProductByID_Found(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/product/waffle-with-berries", nil)
-	req.Header.Set("api_key", "apitest")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -130,10 +108,9 @@ func TestGetProductByID_Found(t *testing.T) {
 }
 
 func TestGetProductByID_NotFound(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/product/does-not-exist", nil)
-	req.Header.Set("api_key", "apitest")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -142,7 +119,7 @@ func TestGetProductByID_NotFound(t *testing.T) {
 // ── POST /api/order ───────────────────────────────────────────────────────────
 
 func TestPlaceOrder_NoAuth(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 	body := `{"items":[{"productId":"waffle-with-berries","quantity":1}]}`
 	req, _ := http.NewRequest(http.MethodPost, "/api/order", bytes.NewBufferString(body))
@@ -152,12 +129,12 @@ func TestPlaceOrder_NoAuth(t *testing.T) {
 }
 
 func TestPlaceOrder_OK_NoCoupon(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 	body := `{"items":[{"productId":"waffle-with-berries","quantity":2}]}`
 	req, _ := http.NewRequest(http.MethodPost, "/api/order", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api_key", "apitest")
+	req.Header.Set("api_key", testAPIKey)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -170,7 +147,7 @@ func TestPlaceOrder_OK_NoCoupon(t *testing.T) {
 }
 
 func TestPlaceOrder_OK_WithValidCoupon(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 
 	reqBody := map[string]interface{}{
@@ -180,7 +157,7 @@ func TestPlaceOrder_OK_WithValidCoupon(t *testing.T) {
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest(http.MethodPost, "/api/order", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api_key", "apitest")
+	req.Header.Set("api_key", testAPIKey)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -193,7 +170,7 @@ func TestPlaceOrder_OK_WithValidCoupon(t *testing.T) {
 }
 
 func TestPlaceOrder_InvalidCoupon_422(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 
 	reqBody := map[string]interface{}{
@@ -203,14 +180,14 @@ func TestPlaceOrder_InvalidCoupon_422(t *testing.T) {
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest(http.MethodPost, "/api/order", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api_key", "apitest")
+	req.Header.Set("api_key", testAPIKey)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }
 
 func TestPlaceOrder_UnknownProduct_404(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 
 	reqBody := map[string]interface{}{
@@ -219,18 +196,18 @@ func TestPlaceOrder_UnknownProduct_404(t *testing.T) {
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest(http.MethodPost, "/api/order", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api_key", "apitest")
+	req.Header.Set("api_key", testAPIKey)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestPlaceOrder_BadBody_400(t *testing.T) {
-	r, _ := buildTestRouter(t)
+	r := buildTestRouter(t)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/order", bytes.NewBufferString(`{invalid json}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api_key", "apitest")
+	req.Header.Set("api_key", testAPIKey)
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

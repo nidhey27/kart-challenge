@@ -100,8 +100,8 @@ func TestOrderService_ValidOrder_WithCoupon_DiscountApplied(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, order)
 	require.NotNil(t, order.Discount)
-	assert.Equal(t, 1.30, *order.Discount)  // 10% of 13.00
-	assert.Equal(t, 11.70, order.Total)     // 13.00 - 1.30
+	assert.Equal(t, 1.30, *order.Discount) // 10% of 13.00
+	assert.Equal(t, 11.70, order.Total)    // 13.00 - 1.30
 }
 
 func TestOrderService_UnknownProduct_Returns404(t *testing.T) {
