@@ -6,25 +6,30 @@ interface Props {
   onRemove: (productId: string) => void;
   onConfirm: (couponCode?: string) => Promise<void>;
   isSubmitting: boolean;
+  orderError: string | null;
   order: Order | null;
 }
 
-export default function CartPanel({ entries, onRemove, onConfirm, isSubmitting }: Props) {
+export default function CartPanel({ entries, onRemove, onConfirm, isSubmitting, orderError }: Props) {
   const [coupon, setCoupon] = useState('');
-  const [couponApplied, setCouponApplied] = useState('');
   const [couponMsg, setCouponMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const totalItems = entries.reduce((s, e) => s + e.quantity, 0);
   const subtotal = entries.reduce((s, e) => s + e.product.price * e.quantity, 0);
 
   const handleApplyCoupon = () => {
-    if (!coupon.trim()) return;
-    setCouponApplied(coupon.trim());
-    setCouponMsg({ text: 'Coupon will be applied at checkout.', type: 'success' });
+    const code = coupon.trim();
+    if (!code) return;
+    if (code.length < 8 || code.length > 10) {
+      setCouponMsg({ text: 'Code must be 8–10 characters.', type: 'error' });
+    } else {
+      setCouponMsg({ text: 'Will be applied at checkout.', type: 'success' });
+    }
   };
 
+  // Always send whatever is in the input — no separate "Apply" step required
   const handleConfirm = async () => {
-    await onConfirm(couponApplied || undefined);
+    await onConfirm(coupon.trim() || undefined);
   };
 
   return (
@@ -77,7 +82,6 @@ export default function CartPanel({ entries, onRemove, onConfirm, isSubmitting }
                 onChange={(e) => {
                   setCoupon(e.target.value);
                   setCouponMsg(null);
-                  if (!e.target.value) setCouponApplied('');
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
               />
@@ -103,6 +107,10 @@ export default function CartPanel({ entries, onRemove, onConfirm, isSubmitting }
             </svg>
             This is a <strong>carbon neutral</strong> delivery
           </div>
+
+          {orderError && (
+            <p className="cart-order-error">{orderError}</p>
+          )}
 
           <button
             className="confirm-btn"

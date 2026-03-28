@@ -371,6 +371,17 @@ body {
   margin-bottom: 20px;
 }
 
+/* Inline order error */
+.cart-order-error {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--red);
+  background: #fdf0ed;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
 /* Confirm button */
 .confirm-btn {
   width: 100%;

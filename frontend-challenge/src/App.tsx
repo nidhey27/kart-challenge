@@ -54,6 +54,7 @@ export default function App() {
       next.delete(productId);
       return next;
     });
+    setError(null);
   }, []);
 
   const handleConfirm = async (couponCode?: string) => {
@@ -112,25 +113,10 @@ export default function App() {
           onRemove={removeFromCart}
           onConfirm={handleConfirm}
           isSubmitting={isSubmitting}
+          orderError={error}
           order={order}
         />
       </main>
-
-      {/* Error toast */}
-      {error && (
-        <div
-          role="alert"
-          style={{
-            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-            background: 'var(--rose-900)', color: '#fff', padding: '12px 24px',
-            borderRadius: 999, fontSize: '0.875rem', fontWeight: 600, zIndex: 200,
-            maxWidth: '90vw', textAlign: 'center',
-          }}
-          onClick={() => setError(null)}
-        >
-          {error}
-        </div>
-      )}
 
       {/* Order confirmation modal */}
       {order && <OrderModal order={order} onNewOrder={handleNewOrder} />}
