@@ -77,11 +77,10 @@ func buildRouter(
 	})
 
 	api := r.Group("/api")
-	api.Use(middleware.APIKeyAuth(cfg.APIKey))
 	{
 		api.GET("/product", productHandler.GetAll)
 		api.GET("/product/:id", productHandler.GetByID)
-		api.POST("/order", orderHandler.PlaceOrder)
+		api.POST("/order", middleware.APIKeyAuth(cfg.APIKey), orderHandler.PlaceOrder)
 	}
 
 	return r
